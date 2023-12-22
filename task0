@@ -1,0 +1,131 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <string.h>
+#include <signal.h>
+
+#define BUFSIZE 1024
+
+char **split_line(char *line);
+int execute(char **args);
+
+/**
+ * main - Simple Shell
+ * @argc: Number of arguments.
+ * @argv: Array of arguments.
+ * Return: Always 0.
+ */
+int main(int argc, char **argv)
+{
+    char *line;
+    char **args;
+    int status;
+
+    signal(SIGINT, SIG_IGN);
+
+    while (1)
+    {
+        printf("$ ");
+        line = NULL;
+        size_t len = 0;
+        getline(&line, &len, stdin);
+
+        args = split_line(line);
+        status = execute(args);
+
+        free(line);
+        free(args);
+
+        if (status)
+            break;
+    }
+
+    return 0;
+}
+
+/**
+ * split_line - Splits a line into tokens.
+ * @line: The input line.
+ * Return: Array of tokens.
+ */
+char **split_line(char *line)
+{
+    int bufsize = BUFSIZE, position = 0;
+    char **tokens = malloc(bufsize * sizeof(char *));
+    char *token;
+
+    if (!tokens)
+    {
+        perror("Allocation error");
+        exit(EXIT_FAILURE);
+    }
+
+    token = strtok(line, " \t\r\n\a");
+    while (token)
+    {
+        tokens[position] = token;
+        position++;
+
+        if (position >= bufsize)
+        {
+            bufsize += BUFSIZE;
+            tokens = realloc(tokens, bufsize * sizeof(char *));
+            if (!tokens)
+            {
+                perror("Allocation error");
+                exit(EXIT_FAILURE);
+            }
+        }
+
+        token = strtok(NULL, " \t\r\n\a");
+    }
+    tokens[position] = NULL;
+    return tokens;
+}
+
+/**
+ * execute - Executes a command.
+ * @args: Array of arguments.
+ * Return: 1 if the shell should continue, 0 if exit command is given.
+ */
+int execute(char **args)
+{
+    pid_t pid, wpid;
+    int status;
+
+    if (args == NULL || args[0] == NULL)
+        return 1;
+
+    if (strcmp(args[0], "exit") == 0)
+        return 0;
+
+    pid = fork();
+    if (pid == 0)
+    {
+        // Child process
+        if (execvp(args[0], args) == -1)
+        {
+            perror(argv[0]);
+        }
+        exit(EXIT_FAILURE);
+    }
+    else if (pid < 0)
+    {
+        perror(argv[0]);
+    }
+    else
+    {
+        // Parent process
+        do
+        {
+            wpid = waitpid(pid, &status, WUNTRACED);
+        } while (!WIFEXITED(status) && !WIFSIGNALED(status));
+    }
+
+    return 1;
+}
+
